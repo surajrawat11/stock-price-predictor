@@ -2,6 +2,8 @@
 
 > Predicting whether Nifty 50 will go **UP ↑** or **DOWN ↓**
 
+🌐 **Live Demo:** [surajrawat11.github.io/stock-price-predictor](https://surajrawat11.github.io/stock-price-predictor)
+
 ---
 
 ## 🎯 Problem Statement
