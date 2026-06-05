@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Nifty 50 Direction Predictor | Suraj Singh Rawat</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --card: #1a2235;
+      --border: #1e2d45;
+      --accent: #00d4aa;
+      --accent2: #f59e0b;
+      --accent3: #3b82f6;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --up: #10b981;
+      --down: #ef4444;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE TEXTURE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.4;
+    }
+
+    /* ── GRID BG ── */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 6rem 8%;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      top: -200px; right: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0,212,170,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,212,170,0.1);
+      border: 1px solid rgba(0,212,170,0.3);
+      color: var(--accent);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 2rem;
+      animation: fadeUp 0.6s ease both;
+    }
+
+    .badge::before { content: '●'; font-size: 0.5rem; animation: pulse 2s infinite; }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.8rem, 7vw, 6rem);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -2px;
+      margin-bottom: 1.5rem;
+      animation: fadeUp 0.6s 0.1s ease both;
+    }
+
+    h1 span.up   { color: var(--up); }
+    h1 span.down { color: var(--down); }
+    h1 span.acc  { color: var(--accent); }
+
+    .hero-sub {
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+      animation: fadeUp 0.6s 0.2s ease both;
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      animation: fadeUp 0.6s 0.3s ease both;
+    }
+
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stat-val {
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: 'DM Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* ── TICKER TAPE ── */
+    .ticker {
+      position: relative;
+      z-index: 1;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+      padding: 12px 0;
+      white-space: nowrap;
+    }
+
+    .ticker-inner {
+      display: inline-flex;
+      gap: 3rem;
+      animation: ticker 20s linear infinite;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+    }
+
+    .ticker-inner span { color: var(--muted); }
+    .ticker-inner span.up-t { color: var(--up); }
+    .ticker-inner span.dn-t { color: var(--down); }
+
+    @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+
+    /* ── SECTIONS ── */
+    section {
+      position: relative;
+      z-index: 1;
+      padding: 5rem 8%;
+    }
+
+    .section-label {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 1rem;
+    }
+
+    h2 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      font-weight: 800;
+      margin-bottom: 3rem;
+      letter-spacing: -1px;
+    }
+
+    /* ── CARDS ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      transition: transform 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent);
+      box-shadow: 0 0 30px rgba(0,212,170,0.08);
+    }
+
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+
+    .card h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+
+    .card p {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    /* ── VIZ SECTION ── */
+    .viz-grid {
+      display: grid;
+      gap: 2rem;
+    }
+
+    .viz-item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .viz-item:hover { border-color: var(--accent3); }
+
+    .viz-header {
+      padding: 1.5rem 2rem 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .viz-num {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--accent);
+      background: rgba(0,212,170,0.1);
+      border: 1px solid rgba(0,212,170,0.2);
+      padding: 4px 10px;
+      border-radius: 100px;
+    }
+
+    .viz-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .viz-item img {
+      width: 100%;
+      display: block;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th {
+      background: var(--surface);
+      padding: 1rem 1.5rem;
+      text-align: left;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    code {
+      font-family: 'DM Mono', monospace;
+      background: rgba(0,212,170,0.1);
+      color: var(--accent);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+
+    /* ── MODEL RESULTS ── */
+    .model-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .model-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .model-card.best {
+      border-color: var(--accent);
+      box-shadow: 0 0 40px rgba(0,212,170,0.1);
+    }
+
+    .model-card.best::before {
+      content: 'BEST';
+      position: absolute;
+      top: 12px; right: 12px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.6rem;
+      color: var(--accent);
+      background: rgba(0,212,170,0.15);
+      padding: 3px 8px;
+      border-radius: 100px;
+    }
+
+    .model-name {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 1rem;
+    }
+
+    .model-acc {
+      font-family: 'Syne', sans-serif;
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 0.5rem;
+    }
+
+    .model-acc.win { color: var(--accent); }
+    .model-acc.base { color: var(--muted); }
+    .model-acc.lose { color: var(--down); }
+
+    .model-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* ── TECH STACK ── */
+    .tech-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .tech-pill {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      padding: 8px 18px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      color: var(--text);
+      background: var(--card);
+      transition: all 0.2s;
+    }
+
+    .tech-pill:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0,212,170,0.05);
+    }
+
+    /* ── AUTHOR ── */
+    .author-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 3rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .author-avatar {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent3));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--bg);
+      flex-shrink: 0;
+    }
+
+    .author-info h3 {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.4rem;
+      font-weight: 800;
+      margin-bottom: 0.25rem;
+    }
+
+    .author-info p {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+
+    .author-links {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: var(--bg);
+      font-weight: 600;
+    }
+
+    .btn-primary:hover { background: #00b894; transform: translateY(-2px); }
+
+    .btn-outline {
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 2rem;
+      border-top: 1px solid var(--border);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    footer span { color: var(--accent); }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="badge">Amazon ML Summer School 2026 Project</div>
+  <h1>
+    Nifty 50<br>
+    <span class="up">UP ↑</span> or <span class="down">DOWN ↓</span><br>
+    <span class="acc">Predictor</span>
+  </h1>
+  <p class="hero-sub">
+    A machine learning pipeline that predicts the next-day direction of India's Nifty 50 index using 4 years of NSE data, 9 engineered features, and two classification models.
+  </p>
+  <div class="hero-stats">
+    <div class="stat">
+      <span class="stat-val">51.1%</span>
+      <span class="stat-label">RF Accuracy</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">9</span>
+      <span class="stat-label">Features</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">986</span>
+      <span class="stat-label">Trading Days</span>
+    </div>
+    <div class="stat">
+      <span class="stat-val">2</span>
+      <span class="stat-label">ML Models</span>
+    </div>
+  </div>
+</section>
+
+<!-- TICKER TAPE -->
+<div class="ticker">
+  <div class="ticker-inner">
+    <span>NIFTY 50</span>
+    <span class="up-t">▲ 51.1% RF ACCURACY</span>
+    <span>RANDOM FOREST</span>
+    <span class="up-t">▲ BEAT BASELINE</span>
+    <span>RSI · MA5 · MA20 · MA50</span>
+    <span class="dn-t">▼ LR 47.8%</span>
+    <span>986 TRADING DAYS</span>
+    <span class="up-t">▲ 9 FEATURES</span>
+    <span>SCIKIT-LEARN · PANDAS · YFINANCE</span>
+    <span>NIFTY 50</span>
+    <span class="up-t">▲ 51.1% RF ACCURACY</span>
+    <span>RANDOM FOREST</span>
+    <span class="up-t">▲ BEAT BASELINE</span>
+    <span>RSI · MA5 · MA20 · MA50</span>
+    <span class="dn-t">▼ LR 47.8%</span>
+    <span>986 TRADING DAYS</span>
+    <span class="up-t">▲ 9 FEATURES</span>
+    <span>SCIKIT-LEARN · PANDAS · YFINANCE</span>
+  </div>
+</div>
+
+<hr class="divider"/>
+
+<!-- HOW IT WORKS -->
+<section>
+  <p class="section-label reveal">How It Works</p>
+  <h2 class="reveal">The Pipeline</h2>
+  <div class="cards">
+    <div class="card reveal">
+      <div class="card-icon">📥</div>
+      <h3>1. Data Collection</h3>
+      <p>Downloaded 4 years of real Nifty 50 OHLCV data (2021–2024) from Yahoo Finance using the yfinance library — no manual download needed.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon">⚙️</div>
+      <h3>2. Feature Engineering</h3>
+      <p>Created 9 financial features including RSI, moving averages (MA5/20/50), volatility, and volume momentum — signals real traders use.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon">🎯</div>
+      <h3>3. Target Creation</h3>
+      <p>Binary label — 1 if tomorrow's price is higher, 0 if lower. Time-series split (80/20) with no shuffle to prevent data leakage.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon">🤖</div>
+      <h3>4. Model Training</h3>
+      <p>Trained Logistic Regression (baseline) and Random Forest (200 trees). RF captured non-linear patterns and beat the 50% random baseline.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon">📊</div>
+      <h3>5. Visualization</h3>
+      <p>3 professional charts — price trends with MAs, feature importance analysis, and model comparison dashboard with confusion matrices.</p>
+    </div>
+    <div class="card reveal">
+      <div class="card-icon">💡</div>
+      <h3>6. Key Insight</h3>
+      <p>Daily Return was the most important feature (0.147). Nifty 50 is highly efficient — even beating 50% consistently is statistically meaningful.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- VISUALIZATIONS -->
+<section>
+  <p class="section-label reveal">Results</p>
+  <h2 class="reveal">Visualizations</h2>
+  <div class="viz-grid">
+    <div class="viz-item reveal">
+      <div class="viz-header">
+        <span class="viz-num">01</span>
+        <span class="viz-title">Nifty 50 Price with Moving Averages (2021–2024)</span>
+      </div>
+      <img src="viz1_price_moving_averages.png" alt="Price Chart with Moving Averages" loading="lazy"/>
+    </div>
+    <div class="viz-item reveal">
+      <div class="viz-header">
+        <span class="viz-num">02</span>
+        <span class="viz-title">Feature Importance & RSI Distribution</span>
+      </div>
+      <img src="viz2_feature_importance_rsi.png" alt="Feature Importance and RSI Analysis" loading="lazy"/>
+    </div>
+    <div class="viz-item reveal">
+      <div class="viz-header">
+        <span class="viz-num">03</span>
+        <span class="viz-title">Model Comparison Dashboard</span>
+      </div>
+      <img src="viz3_model_comparison.png" alt="Model Comparison Dashboard" loading="lazy"/>
+    </div>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- FEATURES TABLE -->
+<section>
+  <p class="section-label reveal">Feature Engineering</p>
+  <h2 class="reveal">9 Engineered Features</h2>
+  <div class="table-wrap reveal">
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>Description</th>
+          <th>Importance</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>Return</code></td><td>Daily percentage price change</td><td>🥇 0.147</td></tr>
+        <tr><td><code>High_Low_Pct</code></td><td>(High - Low) / Close — daily price range</td><td>🥈 0.121</td></tr>
+        <tr><td><code>Volatility</code></td><td>10-day rolling std dev of returns</td><td>🥉 0.120</td></tr>
+        <tr><td><code>Vol_Change</code></td><td>Day-over-day volume momentum</td><td>0.118</td></tr>
+        <tr><td><code>RSI</code></td><td>14-day Relative Strength Index</td><td>0.117</td></tr>
+        <tr><td><code>MA_50</code></td><td>50-day moving average</td><td>0.101</td></tr>
+        <tr><td><code>MA_5</code></td><td>5-day moving average</td><td>0.098</td></tr>
+        <tr><td><code>MA_ratio</code></td><td>MA5 / MA20 momentum signal</td><td>0.091</td></tr>
+        <tr><td><code>MA_20</code></td><td>20-day moving average</td><td>0.087</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- MODEL RESULTS -->
+<section>
+  <p class="section-label reveal">Model Performance</p>
+  <h2 class="reveal">Results</h2>
+  <div class="model-cards">
+    <div class="model-card reveal">
+      <div class="model-name">Random Baseline</div>
+      <div class="model-acc base">50.0%</div>
+      <div class="model-note">Coin flip — benchmark to beat</div>
+    </div>
+    <div class="model-card reveal">
+      <div class="model-name">Logistic Regression</div>
+      <div class="model-acc lose">47.8%</div>
+      <div class="model-note">Linear model — below baseline</div>
+    </div>
+    <div class="model-card best reveal">
+      <div class="model-name">Random Forest</div>
+      <div class="model-acc win">51.1%</div>
+      <div class="model-note">200 trees — beat the baseline ✓</div>
+    </div>
+  </div>
+  <div class="card reveal" style="border-left: 3px solid var(--accent2);">
+    <p style="color: var(--accent2); font-family: 'DM Mono', monospace; font-size:0.75rem; margin-bottom:0.5rem;">WHY 51% IS MEANINGFUL</p>
+    <p>Stock markets are extremely efficient — millions of expert traders compete daily. Consistently beating the 50% random baseline demonstrates that the model has extracted real, statistically significant patterns from historical data. Interpretability and feature engineering quality matter as much as raw accuracy in financial ML.</p>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- TECH STACK -->
+<section>
+  <p class="section-label reveal">Built With</p>
+  <h2 class="reveal">Tech Stack</h2>
+  <div class="tech-list reveal">
+    <span class="tech-pill">Python 3.12</span>
+    <span class="tech-pill">Scikit-learn</span>
+    <span class="tech-pill">Pandas</span>
+    <span class="tech-pill">NumPy</span>
+    <span class="tech-pill">yFinance</span>
+    <span class="tech-pill">Matplotlib</span>
+    <span class="tech-pill">Seaborn</span>
+    <span class="tech-pill">Random Forest</span>
+    <span class="tech-pill">Logistic Regression</span>
+    <span class="tech-pill">NSE Data</span>
+  </div>
+</section>
+
+<hr class="divider"/>
+
+<!-- AUTHOR -->
+<section>
+  <p class="section-label reveal">About</p>
+  <h2 class="reveal">Author</h2>
+  <div class="author-card reveal">
+    <div class="author-avatar">SR</div>
+    <div class="author-info">
+      <h3>Suraj Singh Rawat</h3>
+      <p>B.Tech 3rd Year · MGM COET Noida · Aspiring ML Engineer</p>
+      <div class="author-links">
+        <a href="https://github.com/surajrawat11/stock-price-predictor" class="btn btn-primary" target="_blank">
+          ⌥ View on GitHub
+        </a>
+        <a href="https://www.linkedin.com/in/suraj-rawat-ai/" class="btn btn-outline" target="_blank">
+          in LinkedIn
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Built for <span>Amazon ML Summer School 2026</span> · Suraj Singh Rawat · 2026
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>
